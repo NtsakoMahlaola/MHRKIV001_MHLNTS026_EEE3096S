@@ -1,0 +1,127 @@
+/*
+ * assembly.s
+ *
+ */
+ 
+ @ DO NOT EDIT
+	.syntax unified
+    .text
+    .global ASM_Main
+    .thumb_func
+
+@ DO NOT EDIT
+vectors:
+	.word 0x20002000
+	.word ASM_Main + 1
+
+@ DO NOT EDIT label ASM_Main
+ASM_Main:
+
+	@ Some code is given below for you to start with
+	LDR R0, RCC_BASE  		@ Enable clock for GPIOA and B by setting bit 17 and 18 in RCC_AHBENR
+	LDR R1, [R0, #0x14]
+	LDR R2, AHBENR_GPIOAB	@ AHBENR_GPIOAB is defined under LITERALS at the end of the code
+	ORRS R1, R1, R2
+	STR R1, [R0, #0x14]
+
+	LDR R0, GPIOA_BASE		@ Enable pull-up resistors for pushbuttons
+	MOVS R1, #0b01010101
+	STR R1, [R0, #0x0C]
+	LDR R1, GPIOB_BASE  	@ Set pins connected to LEDs to outputs
+	LDR R2, MODER_OUTPUT
+	STR R2, [R1, #0]
+	MOVS R2, #0         	@ NOTE: R2 will be dedicated to holding the value on the LEDs
+
+main_loop:
+
+	@ Check if SW0 is pressed
+	LDR R0, GPIOA_BASE		@ Load GPIOA base address to R0
+	LDR R3, [R0, #0x10]     @ Read GPIOA_IDR (Input Data Register) to check the state of the pushbuttons
+	MOVS R4, #1             @ Load 1 into R4 to mask bit 0 (SW0)
+	TST R3, R4              @ Test bit 0 (SW0 state)
+
+	BEQ sw0_pressed			@ If SW0 is pressed (0), branch to sw0_pressed
+
+	@ Check if SW1 is pressed (bit 1)
+	MOVS R4, #2             @ Load 2 into R4 to mask bit 1 (SW1)
+	TST R3, R4              @ Test bit 1 (SW1 state)
+	BEQ sw1_pressed			@ If SW1 is pressed (0), branch to sw1_pressed
+
+	@ Check if SW2 is pressed (bit 2)
+	MOVS R4, #4             @ Load 4 into R4 to mask bit 2 (SW2)
+	TST R3, R4              @ Test bit 2 (SW2 state)
+	BEQ sw2_pressed			@ If SW2 is pressed (0), branch to sw2_pressed
+
+	@ Check if SW3 is pressed (bit 3)
+	MOVS R4, #8             @ Load 8 into R4 to mask bit 3 (SW3)
+	TST R3, R4              @ Test bit 3 (SW3 state)
+	BEQ sw3_pressed			@ If SW3 is pressed (0), branch to sw3_pressed
+
+	@ Default behavior: increment by 1 with 0.7 second delay
+	BL delay_700ms			@ Call the delay subroutine for 0.7 seconds
+	ADDS R2, R2, #1			@ Increment the LED value by 1
+	B write_leds			@ Branch to write_leds
+
+sw0_pressed:
+	@ SW0 is pressed, increment by 2
+	BL delay_700ms			@ Call the delay subroutine for 0.7 seconds
+	ADDS R2, R2, #2			@ Increment the LED value by 2
+	B write_leds			@ Continue to write_leds
+
+sw1_pressed:
+	@ SW1 is pressed, change to 0.3 second delay
+	BL delay_300ms			@ Call the delay subroutine for 0.3 seconds
+	ADDS R2, R2, #1			@ Increment the LED value by 1
+	B write_leds			@ Continue to write_leds
+
+sw2_pressed:
+	@ SW2 is pressed, set LED pattern to 0xAA
+	MOVS R2, #0xAA			@ Load 0xAA into R2
+	B write_leds			@ Continue to write_leds
+
+sw3_pressed:
+	@ SW3 is pressed, freeze the LED pattern
+	B write_leds			@ Skip increment and continue showing the same pattern
+
+write_leds:
+	LSLS R2, R2, #24        @ Shift left to isolate the lower 8 bits (only 8 LEDs)
+	LSRS R2, R2, #24        @ Shift back to keep only the lower 8 bits
+
+	STR R2, [R1, #0x14]		@ Store the value in GPIOB_ODR (Output Data Register)
+	B main_loop				@ Repeat the loop
+
+@ Subroutine for 0.7-second delay
+delay_700ms:
+	PUSH {R0, R1}			@ Save registers R0 and R1 to stack
+
+	LDR R0, LONG_DELAY_CNT	@ Load the loop count for 0.7 seconds
+delay_loop_700:
+	SUBS R0, R0, #1			@ Decrement the counter
+	BNE delay_loop_700		@ If not zero, loop again
+
+	POP {R0, R1}			@ Restore registers
+	BX LR					@ Return from subroutine
+
+@ Subroutine for 0.3-second delay
+delay_300ms:
+	PUSH {R0, R1}			@ Save registers R0 and R1 to stack
+
+	LDR R0, SHORT_DELAY_CNT	@ Load the loop count for 0.3 seconds
+delay_loop_300:
+	SUBS R0, R0, #1			@ Decrement the counter
+	BNE delay_loop_300		@ If not zero, loop again
+
+	POP {R0, R1}			@ Restore registers
+	BX LR					@ Return from subroutine
+
+@ LITERALS; DO NOT EDIT
+	.align
+RCC_BASE: 			.word 0x40021000
+AHBENR_GPIOAB: 		.word 0b1100000000000000000
+GPIOA_BASE:  		.word 0x48000000
+GPIOB_BASE:  		.word 0x48000400
+MODER_OUTPUT: 		.word 0x5555
+
+@ TODO: Add your own values for these delays
+LONG_DELAY_CNT: 	.word 560000		@ This is an estimated value for a 0.7-second delay
+SHORT_DELAY_CNT: 	.word 240000		@ This is an estimated value for a 0.3-second delay
